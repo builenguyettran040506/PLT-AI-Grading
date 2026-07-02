@@ -1,0 +1,131 @@
+.sidebar{
+
+    width:260px;
+
+    height:100vh;
+
+    background:#111827;
+
+    position:fixed;
+
+    left:0;
+
+    top:0;
+
+    color:white;
+
+}
+
+.logo{
+
+    padding:30px;
+
+    text-align:center;
+
+}
+
+.logo img{
+
+    width:120px;
+
+}
+
+.sidebar ul{
+
+    list-style:none;
+
+}
+
+.sidebar ul li{
+
+    margin:10px 15px;
+
+}
+
+.sidebar ul li a{
+
+    color:#BFC6D8;
+
+    text-decoration:none;
+
+    display:flex;
+
+    align-items:center;
+
+    gap:15px;
+
+    padding:15px;
+
+    border-radius:12px;
+
+    transition:.3s;
+
+}
+
+.sidebar ul li a:hover{
+
+    background:#1E3A8A;
+
+    color:white;
+
+}
+
+.active{
+
+    background:#2563EB;
+
+    color:white!important;
+
+}
+
+.pro-card{
+
+    position:absolute;
+
+    bottom:20px;
+
+    left:15px;
+
+    right:15px;
+
+    background:#1E293B;
+
+    padding:20px;
+
+    border-radius:15px;
+
+}
+
+.pro-card h3{
+
+    margin-bottom:10px;
+
+}
+
+.pro-card p{
+
+    color:#CBD5E1;
+
+    font-size:13px;
+
+    margin-bottom:15px;
+
+}
+
+.pro-card button{
+
+    width:100%;
+
+    padding:12px;
+
+    border:none;
+
+    background:#3B82F6;
+
+    color:white;
+
+    border-radius:10px;
+
+    cursor:pointer;
+
+}
