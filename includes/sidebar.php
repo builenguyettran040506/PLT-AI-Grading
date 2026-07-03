@@ -1,4 +1,5 @@
 <aside class="sidebar">
+    <!-- Khu vực Logo -->
     <div class="logo">
         <a href="index.php" class="logo-link">
             <h2 class="text-2xl font-bold tracking-wide text-white">PLT</h2>
@@ -6,6 +7,7 @@
         </a>
     </div>
 
+    <!-- Menu điều hướng -->
     <ul class="mt-4">
         <li>
             <a href="index.php?page=dashboard" class="<?php echo ($page == 'dashboard') ? 'active' : ''; ?>">
@@ -28,12 +30,4 @@
             </a>
         </li>
     </ul>
-
-    <div class="pro-card">
-        <h3 class="flex items-center gap-2 text-yellow-500 font-semibold text-sm">
-            <i class="fa-solid fa-wand-magic-sparkles"></i> Pro AI Tiers
-        </h3>
-        <p>Nâng cấp để chấm điểm tự động không giới hạn.</p>
-        <button class="hover:bg-blue-600 transition">Nâng cấp ngay</button>
-    </div>
 </aside>
