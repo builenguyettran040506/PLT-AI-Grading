@@ -26,7 +26,7 @@
         </li>
         <li>
             <a href="index.php?page=settings" class="<?php echo ($page == 'settings') ? 'active' : ''; ?>">
-                <i class="fa-solid fa-gear w-5 text-center"></i> Cài đặt AI
+                <i class="fa-solid fa-gear w-5 text-center"></i> Cài đặt 
             </a>
         </li>
     </ul>

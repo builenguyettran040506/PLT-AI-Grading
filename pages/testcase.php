@@ -17,20 +17,28 @@
     <!-- CỘT TRÁI: KHU VỰC BẢNG NHẬP TEST CASE -->
     <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
         
-        <!-- Toolbar (Header của Form) -->
-        <div class="p-5 border-b border-slate-100 flex items-start justify-between bg-white">
-            <div>
-                <h2 class="text-lg font-semibold text-slate-800">Tạo mới Test Case</h2>
-                <p class="text-sm text-slate-500 mt-1">Mô tả chi tiết kịch bản kiểm thử của bạn</p>
-            </div>
-            <div class="flex items-center gap-3">
-                <button class="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition">
+        <!-- Toolbar (Đã tinh chỉnh kích thước nhỏ gọn trên 1 hàng) -->
+        <div class="p-4 border-b border-slate-100 flex items-center justify-between gap-4 bg-white overflow-hidden">
+            
+            
+            <!-- Container tìm kiếm và nút (Chống rớt dòng) -->
+            <div class="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1 -mb-1 w-full sm:w-auto justify-start sm:justify-end">
+                
+                <!-- Thanh tìm kiếm -->
+                <div class="relative w-[180px] md:w-[220px] shrink-0">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]"></i>
+                    <input type="text" id="searchTC" onkeyup="filterTestCase()" placeholder="Tìm TC ID, Tiêu đề..." 
+                           class="w-full border border-slate-300 rounded-lg pl-8 pr-3 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 bg-slate-50 focus:bg-white transition-colors">
+                </div>
+
+                <!-- Các nút chức năng (Thu nhỏ & chống xuống dòng) -->
+                <button class="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-[13px] text-slate-700 hover:bg-slate-50 transition shrink-0 whitespace-nowrap">
                     <i class="fa-regular fa-file-excel text-emerald-600"></i> Nhập Excel
                 </button>
-                <button class="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition">
+                <button class="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-[13px] text-slate-700 hover:bg-slate-50 transition shrink-0 whitespace-nowrap">
                     <i class="fa-regular fa-floppy-disk text-slate-500"></i> Lưu nháp
                 </button>
-                <button class="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium shadow-sm transition">
+                <button class="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[13px] font-medium shadow-sm transition shrink-0 whitespace-nowrap">
                     <i class="fa-solid fa-wand-magic-sparkles"></i> AI Chấm điểm
                 </button>
             </div>
@@ -41,7 +49,7 @@
             <table class="w-full text-left border-collapse min-w-[1100px]">
                 <thead>
                     <tr class="bg-slate-50/30 border-b border-slate-200 text-[13px] font-bold text-slate-700">
-                        <th class="px-4 py-3.5 w-16 text-center">TC ID</th>
+                        <th class="px-4 py-3.5 w-20 text-center">TC ID</th>
                         <th class="px-4 py-3.5 min-w-[220px]">Title</th>
                         <th class="px-4 py-3.5 w-24 text-center">Estimation</th>
                         <th class="px-4 py-3.5 w-20 text-center">Area</th>
@@ -51,12 +59,11 @@
                         <th class="px-4 py-3.5 w-24">RESULT</th>
                     </tr>
                 </thead>
-                <!-- Gắn ID 'testcase-tbody' để JavaScript có thể tìm và thêm hàng vào đây -->
                 <tbody id="testcase-tbody" class="divide-y divide-slate-100">
                     
                     <!-- Dòng dữ liệu ban đầu -->
                     <tr class="hover:bg-slate-50/50 transition-colors group">
-                        <td class="px-4 py-4 text-sm text-slate-500 text-center align-top pt-5"></td>
+                        <td class="px-4 py-4 text-[13px] font-semibold text-slate-700 text-center align-top pt-5">TC-001</td>
                         <td class="px-4 py-4 align-top">
                             <textarea rows="3" class="w-full text-[13px] text-slate-800 resize-none focus:outline-none bg-transparent leading-relaxed" placeholder="Nhập tiêu đề...">Xác thực luồng thanh toán giỏ hàng qua ví điện tử</textarea>
                         </td>
@@ -73,7 +80,7 @@
                             <textarea rows="4" class="w-full text-[13px] text-slate-800 resize-none focus:outline-none bg-transparent leading-relaxed">Chuyển hướng sang cổng thanh toán Momo thành công.</textarea>
                         </td>
                         <td class="px-4 py-4 align-top pt-5">
-                            <select class="w-full text-[13px] text-slate-800 focus:outline-none bg-transparent appearance-none cursor-pointer">
+                            <select class="w-full text-[13px] text-slate-800 focus:outline-none bg-transparent appearance-none cursor-pointer font-semibold">
                                 <option value="High" selected>High</option>
                                 <option value="Medium">Medium</option>
                                 <option value="Low">Low</option>
@@ -87,7 +94,7 @@
                 </tbody>
             </table>
             
-            <!-- Nút Thêm dòng (Gắn sự kiện onclick gọi hàm JS) -->
+            <!-- Nút Thêm dòng -->
             <div class="px-6 py-4">
                 <button onclick="addTestCaseRow()" class="flex items-center gap-2 text-[13px] font-medium text-blue-600 hover:text-blue-700 transition">
                     <i class="fa-solid fa-plus"></i> Thêm Test Case mới
@@ -109,19 +116,23 @@
 
 </div>
 
-<!-- JAVASCRIPT: XỬ LÝ THÊM HÀNG -->
+<!-- JAVASCRIPT XỬ LÝ -->
 <script>
+    let tcIdCounter = 2; // Biến đếm để tạo TC-002, TC-003,...
+
+    // Hàm tạo thêm hàng nhập liệu mới
     function addTestCaseRow() {
-        // Tìm vùng chứa danh sách các hàng (tbody)
         const tbody = document.getElementById('testcase-tbody');
-        
-        // Tạo một thẻ <tr> mới
         const newRow = document.createElement('tr');
-        newRow.className = 'hover:bg-slate-50/50 transition-colors group';
         
-        // Định nghĩa cấu trúc HTML bên trong hàng mới
+        // Tạo mã ID tự động (VD: TC-002)
+        const formattedId = "TC-" + String(tcIdCounter).padStart(3, '0');
+        tcIdCounter++;
+
+        newRow.className = 'hover:bg-slate-50/50 transition-colors group bg-blue-50/20';
+        
         newRow.innerHTML = `
-            <td class="px-4 py-4 text-sm text-slate-500 text-center align-top pt-5"></td>
+            <td class="px-4 py-4 text-[13px] font-semibold text-slate-700 text-center align-top pt-5">${formattedId}</td>
             <td class="px-4 py-4 align-top">
                 <textarea rows="3" class="w-full text-[13px] text-slate-800 resize-none focus:outline-none bg-transparent leading-relaxed" placeholder="Nhập tiêu đề..."></textarea>
             </td>
@@ -138,7 +149,7 @@
                 <textarea rows="4" class="w-full text-[13px] text-slate-800 resize-none focus:outline-none bg-transparent leading-relaxed" placeholder="Kết quả mong muốn..."></textarea>
             </td>
             <td class="px-4 py-4 align-top pt-5">
-                <select class="w-full text-[13px] text-slate-800 focus:outline-none bg-transparent appearance-none cursor-pointer">
+                <select class="w-full text-[13px] text-slate-800 focus:outline-none bg-transparent appearance-none cursor-pointer font-semibold">
                     <option value="High">High</option>
                     <option value="Medium" selected>Medium</option>
                     <option value="Low">Low</option>
@@ -149,10 +160,41 @@
             </td>
         `;
         
-        // Thêm hàng mới vào cuối bảng
         tbody.appendChild(newRow);
-        
-        // Tùy chọn (Cuộn trang nhẹ xuống để người dùng thấy hàng mới vừa thêm)
         newRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // Hàm Lọc (Tìm kiếm) Test Case
+    function filterTestCase() {
+        // Lấy giá trị đang nhập ở ô tìm kiếm
+        const input = document.getElementById('searchTC');
+        const filter = input.value.toLowerCase();
+        
+        // Trỏ vào bảng
+        const tbody = document.getElementById('testcase-tbody');
+        const rows = tbody.getElementsByTagName('tr');
+
+        // Duyệt qua từng dòng
+        for (let i = 0; i < rows.length; i++) {
+            // Lấy cột chứa ID (cột 0) và cột chứa Title (cột 1)
+            const tcIdCell = rows[i].getElementsByTagName('td')[0];
+            const titleCell = rows[i].getElementsByTagName('td')[1];
+            
+            if (tcIdCell && titleCell) {
+                // Lấy nội dung text
+                const tcIdText = tcIdCell.textContent || tcIdCell.innerText;
+                
+                // Vì Title nằm trong thẻ textarea, cần lấy .value thay vì text content thông thường
+                const titleTextarea = titleCell.querySelector('textarea');
+                const titleText = titleTextarea ? titleTextarea.value : (titleCell.textContent || titleCell.innerText);
+                
+                // So sánh chuỗi nhập vào với ID và Title
+                if (tcIdText.toLowerCase().indexOf(filter) > -1 || titleText.toLowerCase().indexOf(filter) > -1) {
+                    rows[i].style.display = ""; // Hiện nếu khớp
+                } else {
+                    rows[i].style.display = "none"; // Ẩn nếu không khớp
+                }
+            }
+        }
     }
 </script>

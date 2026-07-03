@@ -13,10 +13,10 @@ session_start();
 // (Tạm thời comment để thiết kế giao diện)
 // =======================================================
 
-// if (!isset($_SESSION['user'])) {
-//     header("Location: login.php");
-//     exit();
-// }
+if (!isset($_SESSION['user'])) {
+    header("Location: login.php");
+    exit();
+}
 
 // =======================================================
 // Khai báo trang mặc định
