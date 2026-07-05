@@ -30,4 +30,13 @@
             </a>
         </li>
     </ul>
+
+    <!-- NÚT ĐĂNG XUẤT -->
+    <div class="p-4 border-t border-slate-800/50">
+        <a href="logout.php" onclick="return confirm('Bạn có chắc chắn muốn đăng xuất không?');" class="flex items-center gap-4 px-4 py-3 rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-500 transition">
+            <i class="fa-solid fa-arrow-right-from-bracket w-5 text-center"></i>
+            <span class="text-[14px] font-medium whitespace-nowrap">Đăng xuất</span>
+        </a>
+    </div>
+
 </aside>
