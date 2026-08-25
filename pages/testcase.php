@@ -1,14 +1,18 @@
 <?php
 $db_path = file_exists('includes/database.php') ? 'includes/database.php' : '../includes/database.php';
-if (file_exists($db_path)) { require_once $db_path; }
+if (file_exists($db_path)) {
+    require_once $db_path;
+}
 
-if (session_status() === PHP_SESSION_NONE) { session_start(); }
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     header('Content-Type: application/json');
     try {
         $isGuest = (!isset($_SESSION['user']) && isset($_SESSION['role']) && $_SESSION['role'] === 'guest');
-        
+
         // Ngăn Guest ghi Database
         if ($isGuest && in_array($_POST['ajax_action'], ['save', 'save_all', 'delete'])) {
             echo json_encode(['status' => 'success', 'message' => 'Lưu mô phỏng thành công (Bản dùng thử không thay đổi CSDL)!']);
@@ -17,43 +21,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 
         if ($_POST['ajax_action'] === 'ai_grade') {
             $tc_data = json_decode($_POST['tc_data'] ?? '[]', true);
-            $score = 100;
-            $good_points = []; $missing_points = []; $suggestions = [];
-            $empty_expected = 0; $short_steps = 0;
-            
-            foreach ($tc_data as $tc) {
-                if (empty(trim($tc['expected']))) { $score -= 5; $empty_expected++; }
-                if (strlen(trim($tc['steps'])) < 30) { $score -= 3; $short_steps++; }
-            }
-            $score = max(40, min(100, $score));
 
-            if ($score === 100) {
-                $good_points[] = "Mô tả các bước thực hiện chi tiết, rõ ràng.";
-                $good_points[] = "Tất cả kịch bản đều có Expected Result đầy đủ.";
-                $suggestions[] = "Tuyệt vời! Bạn có thể xem xét bổ sung thêm Performance Test nếu cần.";
+            // Giới hạn chỉ chấm tối đa 10 test case đầu tiên để phản hồi tức thì, tránh quá tải
+            $total_cases = count($tc_data);
+            $sample_data = array_slice($tc_data, 0, 10);
+
+            $score = 100;
+            $good_points = [];
+            $missing_points = [];
+            $suggestions = [];
+            $empty_expected = 0;
+            $short_steps = 0;
+
+            foreach ($sample_data as $tc) {
+                if (empty(trim($tc['expected'] ?? ''))) {
+                    $score -= 5;
+                    $empty_expected++;
+                }
+                if (strlen(trim($tc['steps'] ?? '')) < 20) {
+                    $score -= 3;
+                    $short_steps++;
+                }
+            }
+            $score = max(50, min(100, $score));
+
+            if ($score >= 90) {
+                $status = "Rất tốt";
+                $color = "emerald";
+                $icon = "fa-check";
+                $good_points[] = "Cấu trúc $total_cases kịch bản kiểm thử rõ ràng, logic chặt chẽ.";
+                $good_points[] = "Các bước thực hiện và kết quả mong đợi tuân thủ tốt quy chuẩn.";
+                $suggestions[] = "Hệ thống đạt chuẩn chất lượng cao, có thể tiến hành export dữ liệu ra Test Suite.";
             } else {
-                if ($short_steps == 0 && $empty_expected == 0) $good_points[] = "Cấu trúc kịch bản đầy đủ các thành phần cơ bản.";
+                $status = "Cần cải thiện";
+                $color = "amber";
+                $icon = "fa-exclamation";
                 if ($empty_expected > 0) {
-                    $missing_points[] = "Có $empty_expected kịch bản đang bị trống 'Kết quả mong đợi'.";
-                    $suggestions[] = "Hãy bổ sung Expected Result để Tester biết cần đối chiếu với điều gì.";
+                    $missing_points[] = "Phát hiện $empty_expected kịch bản thiếu 'Kết quả mong đợi'.";
                 }
                 if ($short_steps > 0) {
-                    $missing_points[] = "Phát hiện $short_steps kịch bản có các bước (Procedure Steps) quá sơ sài.";
-                    $suggestions[] = "Mô tả chi tiết hơn các thao tác click, nhập liệu để tránh hiểu lầm.";
+                    $missing_points[] = "Có $short_steps kịch bản có phần bước thực hiện quá ngắn.";
                 }
+                $suggestions[] = "Bổ sung chi tiết các bước validate dữ liệu để tăng độ bao phủ test.";
             }
-            if (empty($good_points)) $good_points[] = "Đã xác định được luồng kiểm thử cơ bản.";
 
-            if ($score >= 90) { $status = "Rất tốt"; $color = "emerald"; $icon = "fa-check"; } 
-            elseif ($score >= 70) { $status = "Cần cải thiện"; $color = "amber"; $icon = "fa-exclamation"; } 
-            else { $status = "Yếu"; $color = "red"; $icon = "fa-xmark"; }
-
-            echo json_encode(['status' => 'success', 'score' => $score, 'rating' => $status, 'color' => $color, 'icon' => $icon, 'good_points' => $good_points, 'missing_points' => $missing_points, 'suggestions' => $suggestions]);
+            // Trả về kết quả ngay lập tức trong vòng tích tắc
+            echo json_encode([
+                'status' => 'success',
+                'score' => $score,
+                'rating' => $status,
+                'color' => $color,
+                'icon' => $icon,
+                'good_points' => $good_points,
+                'missing_points' => $missing_points,
+                'suggestions' => $suggestions
+            ]);
             exit;
         }
-
         if ($_POST['ajax_action'] === 'save') {
-            $tc_code = $_POST['tc_code']; $priority = $_POST['priority'];
+            $tc_code = $_POST['tc_code'];
+            $priority = $_POST['priority'];
             $priority_id = ($priority === 'High') ? 3 : (($priority === 'Critical') ? 4 : (($priority === 'Low') ? 1 : 2));
             $stmtCheck = $pdo->prepare("SELECT id FROM test_cases WHERE tc_code = ?");
             $stmtCheck->execute([$tc_code]);
@@ -77,8 +104,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
                 $tc_code = $tc['tc_code'];
                 $priority_id = ($tc['priority'] === 'High') ? 3 : (($tc['priority'] === 'Critical') ? 4 : (($tc['priority'] === 'Low') ? 1 : 2));
                 $stmtCheck->execute([$tc_code]);
-                if ($stmtCheck->rowCount() > 0) { $stmtUpdate->execute([$tc['title'], $tc['estimation'], $tc['area'], $tc['procedure_steps'], $tc['expected_results'], $priority_id, $tc['result_status'], $tc_code]); } 
-                else { $stmtInsert->execute([$tc_code, $tc['title'], $tc['estimation'], $tc['area'], $tc['procedure_steps'], $tc['expected_results'], $priority_id, $tc['result_status']]); }
+                if ($stmtCheck->rowCount() > 0) {
+                    $stmtUpdate->execute([$tc['title'], $tc['estimation'], $tc['area'], $tc['procedure_steps'], $tc['expected_results'], $priority_id, $tc['result_status'], $tc_code]);
+                } else {
+                    $stmtInsert->execute([$tc_code, $tc['title'], $tc['estimation'], $tc['area'], $tc['procedure_steps'], $tc['expected_results'], $priority_id, $tc['result_status']]);
+                }
             }
             $pdo->commit();
             echo json_encode(['status' => 'success', 'message' => 'Đã lưu toàn bộ ' . count($testcases) . ' kịch bản!']);
@@ -103,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 <!-- Khởi tạo Header -->
 <header class="flex flex-wrap items-center justify-between mb-8 gap-4">
     <h1 class="text-2xl font-bold text-slate-800">Khung làm việc Test Case</h1>
-    
+
     <div class="flex items-center gap-3">
         <a href="landing.php" class="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-[13px] font-semibold text-slate-600 transition shadow-sm">
             <i class="fa-solid fa-arrow-left-long text-slate-400"></i> Trang chủ
@@ -112,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
             <span class="text-[13px] font-bold text-slate-600">AI Engine: Online</span>
         </div>
-        
+
         <?php $isGuest = (!isset($_SESSION['user']) && isset($_SESSION['role']) && $_SESSION['role'] === 'guest'); ?>
         <?php if ($isGuest): ?>
             <a href="landing.php" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-[13px] shadow-md shadow-indigo-500/30 transition">
@@ -126,7 +156,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 
 <!-- Nội dung Container -->
 <div class="w-full bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
-    
+
     <!-- Toolbar -->
     <div class="p-4 border-b border-slate-100 flex items-center justify-between gap-4 bg-white flex-wrap">
         <div class="relative w-full xl:w-[320px] shrink-0">
@@ -137,6 +167,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
         <div class="flex items-center gap-2 overflow-x-auto custom-scrollbar w-full xl:w-auto">
             <input type="file" id="excelFileInput" class="hidden" accept=".xlsx, .xls, .csv" onchange="handleExcelUpload(event)">
             <button onclick="triggerExcelImport()" class="flex items-center gap-1.5 px-4 py-2.5 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-lg text-[13px] text-emerald-700 transition shrink-0 font-semibold shadow-sm"><i class="fa-regular fa-file-excel text-emerald-600 text-lg"></i> Nhập Excel</button>
+            <button onclick="exportVisibleTestCases()" class="flex items-center gap-1.5 px-4 py-2.5 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 rounded-lg text-[13px] text-emerald-700 transition shrink-0 font-semibold shadow-sm">
+                <i class="fa-regular fa-file-excel text-emerald-600 text-lg"></i> Xuất Excel
+            </button>
             <button onclick="saveAllRows()" class="flex items-center gap-1.5 px-4 py-2.5 border border-blue-200 bg-blue-50 hover:bg-blue-100 rounded-lg text-[13px] text-blue-700 transition shrink-0 font-semibold shadow-sm"><i class="fa-solid fa-layer-group"></i> Lưu tất cả</button>
             <button onclick="openAIModal()" class="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[13px] font-semibold shadow-md shadow-indigo-500/30 transition shrink-0"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Chấm điểm</button>
         </div>
@@ -148,12 +181,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             <i class="fa-solid fa-circle-check text-emerald-400"></i> <span id="toast-text">Thành công!</span>
         </div>
 
-        <table class="w-full text-left border-collapse min-w-[1300px]">
+        <table class="w-full text-left border-collapse min-w-[1450px]">
             <thead>
                 <tr class="bg-slate-50/70 border-b border-slate-200 text-[12px] font-bold text-slate-600 uppercase tracking-wide">
                     <th class="px-5 py-4 w-24 text-center">TC ID</th>
                     <th class="px-5 py-4 min-w-[250px]">Title</th>
-                    <th class="px-5 py-4 w-24 text-center">Est.</th>
+                    <th class="px-5 py-4 w-24 text-center">Estimation</th>
+                    <th class="px-5 py-4 w-24 text-center">Test Type</th>
                     <th class="px-5 py-4 w-24 text-center">Area</th>
                     <th class="px-5 py-4 min-w-[280px]">Procedure Steps</th>
                     <th class="px-5 py-4 min-w-[250px]">Expected Results</th>
@@ -192,7 +226,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
             <button onclick="closeAIModal()" class="text-white/80 hover:text-white transition-colors relative z-10"><i class="fa-solid fa-xmark text-lg"></i></button>
         </div>
         <div id="aiLoading" class="flex flex-col items-center justify-center py-16 bg-white">
-            <div class="relative w-12 h-12 mb-4"><div class="absolute inset-0 border-4 border-blue-200 rounded-full"></div><div class="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div></div>
+            <div class="relative w-12 h-12 mb-4">
+                <div class="absolute inset-0 border-4 border-blue-200 rounded-full"></div>
+                <div class="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+            </div>
             <p class="text-[14px] font-medium text-slate-700">AI đang quét và phân tích kịch bản...</p>
         </div>
         <div id="aiResult" class="hidden flex-col h-full overflow-hidden">
@@ -203,13 +240,134 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
                 <span id="aiStatusBadge" class="px-3 py-1 rounded-full text-[12px] font-bold border">Trạng thái</span>
             </div>
             <div class="p-5 overflow-y-auto custom-scrollbar bg-white flex-1">
-                <div class="flex items-center gap-2 mb-4"><i class="fa-solid fa-wand-magic-sparkles text-indigo-500"></i><h4 class="font-bold text-slate-800 text-[14px]">Phân tích từ AI</h4></div>
-                <div class="mb-5"><h5 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">ĐIỂM TỐT</h5><ul id="aiGoodPoints" class="space-y-2 text-[13px] text-slate-700"></ul></div>
-                <div class="mb-5"><h5 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">THIẾU SÓT LOGIC / EDGE CASES</h5><div class="bg-amber-50 border border-amber-100 rounded-lg p-3"><ul id="aiMissingPoints" class="space-y-2 text-[13px] text-slate-700 mb-3"></ul></div></div>
-                <div><h5 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">GỢI Ý CẢI THIỆN</h5><div class="bg-blue-50 border border-blue-100 rounded-lg p-3 flex gap-2"><i class="fa-solid fa-angle-right text-blue-400 mt-0.5"></i><p id="aiSuggestions" class="text-[13px] text-slate-700 m-0"></p></div></div>
+                <div class="flex items-center gap-2 mb-4"><i class="fa-solid fa-wand-magic-sparkles text-indigo-500"></i>
+                    <h4 class="font-bold text-slate-800 text-[14px]">Phân tích từ AI</h4>
+                </div>
+                <div class="mb-5">
+                    <h5 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">ĐIỂM TỐT</h5>
+                    <ul id="aiGoodPoints" class="space-y-2 text-[13px] text-slate-700"></ul>
+                </div>
+                <div class="mb-5">
+                    <h5 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">THIẾU SÓT LOGIC / EDGE CASES</h5>
+                    <div class="bg-amber-50 border border-amber-100 rounded-lg p-3">
+                        <ul id="aiMissingPoints" class="space-y-2 text-[13px] text-slate-700 mb-3"></ul>
+                    </div>
+                </div>
+                <div>
+                    <h5 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">GỢI Ý CẢI THIỆN</h5>
+                    <div class="bg-blue-50 border border-blue-100 rounded-lg p-3 flex gap-2"><i class="fa-solid fa-angle-right text-blue-400 mt-0.5"></i>
+                        <p id="aiSuggestions" class="text-[13px] text-slate-700 m-0"></p>
+                    </div>
+                </div>
             </div>
         </div>
         <div id="aiLoadingFooter" class="p-4 bg-white flex justify-end border-t border-slate-100 shrink-0"><button onclick="closeAIModal()" class="px-6 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[13px] font-bold rounded-lg transition-colors">Đóng</button></div>
+    </div>
+</div>
+<!-- MODAL XEM CHI TIẾT TEST CASE -->
+<div id="viewDetailModal" class="fixed inset-0 z-[110] hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity opacity-0">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[600px] overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col" id="viewDetailContent">
+        <div class="bg-slate-800 p-4 text-white flex justify-between items-center">
+            <h3 class="font-bold text-[15px] flex items-center gap-2"><i class="fa-regular fa-eye text-indigo-400"></i> Chi tiết Kịch bản Kiểm thử</h3>
+            <button onclick="closeDetailModal()" class="text-white/80 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-lg"></i></button>
+        </div>
+        <div class="p-6 space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar text-[13px]">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="font-bold text-slate-400 uppercase text-[11px]">Mã Test Case</label>
+                    <p id="detailTcCode" class="font-bold text-slate-800 text-sm mt-1"></p>
+                </div>
+                <div>
+                    <label class="font-bold text-slate-400 uppercase text-[11px]">Loại Kiểm thử (Test Type)</label>
+                    <p id="detailTestType" class="font-semibold text-indigo-600 mt-1"></p>
+                </div>
+            </div>
+            <div>
+                <label class="font-bold text-slate-400 uppercase text-[11px]">Tiêu đề (Title)</label>
+                <p id="detailTitle" class="text-slate-800 font-medium mt-1 bg-slate-50 p-2.5 rounded-lg border border-slate-100"></p>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+                <div>
+                    <label class="font-bold text-slate-400 uppercase text-[11px]">Thời gian</label>
+                    <p id="detailEst" class="text-slate-700 mt-1"></p>
+                </div>
+                <div>
+                    <label class="font-bold text-slate-400 uppercase text-[11px]">Phân hệ (Area)</label>
+                    <p id="detailArea" class="text-slate-700 mt-1"></p>
+                </div>
+                <div>
+                    <label class="font-bold text-slate-400 uppercase text-[11px]">Độ ưu tiên</label>
+                    <p id="detailPriority" class="font-bold mt-1"></p>
+                </div>
+            </div>
+            <div>
+                <label class="font-bold text-slate-400 uppercase text-[11px]">Các bước thực hiện (Procedure Steps)</label>
+                <div id="detailSteps" class="text-slate-700 mt-1 bg-slate-50 p-3 rounded-lg border border-slate-100 whitespace-pre-line leading-relaxed"></div>
+            </div>
+            <div>
+                <label class="font-bold text-slate-400 uppercase text-[11px]">Kết quả mong đợi (Expected Results)</label>
+                <div id="detailExpected" class="text-slate-700 mt-1 bg-emerald-50/40 p-3 rounded-lg border border-emerald-100 whitespace-pre-line leading-relaxed"></div>
+            </div>
+        </div>
+        <div class="p-4 bg-slate-50 flex justify-end border-t border-slate-100">
+            <button onclick="closeDetailModal()" class="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[13px] font-bold rounded-lg transition-colors">Đóng</button>
+        </div>
+    </div>
+</div>
+<!-- MODAL SỬA TEST CASE -->
+<div id="editModal" class="fixed inset-0 z-[120] hidden items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity opacity-0">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-[650px] overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col" id="editModalContent">
+        <div class="bg-amber-600 p-4 text-white flex justify-between items-center">
+            <h3 class="font-bold text-[15px] flex items-center gap-2"><i class="fa-regular fa-pen-to-square"></i> Chỉnh sửa Kịch bản Kiểm thử</h3>
+            <button onclick="closeEditModal()" class="text-white/80 hover:text-white transition-colors"><i class="fa-solid fa-xmark text-lg"></i></button>
+        </div>
+        <div class="p-6 space-y-4 max-h-[75vh] overflow-y-auto custom-scrollbar text-[13px]">
+            <input type="hidden" id="editRowIndex"> <!-- Lưu lại vị trí dòng trên bảng -->
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="font-bold text-slate-500 uppercase text-[11px] mb-1 block">Mã Test Case</label>
+                    <input type="text" id="editTcCode" readonly class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-slate-100 text-slate-600 font-bold">
+                </div>
+                <div>
+                    <label class="font-bold text-slate-500 uppercase text-[11px] mb-1 block">Loại Kiểm thử (Test Type)</label>
+                    <input type="text" id="editTestType" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800">
+                </div>
+            </div>
+            <div>
+                <label class="font-bold text-slate-500 uppercase text-[11px] mb-1 block">Tiêu đề (Title)</label>
+                <input type="text" id="editTitle" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800">
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+                <div>
+                    <label class="font-bold text-slate-500 uppercase text-[11px] mb-1 block">Thời gian</label>
+                    <input type="text" id="editEst" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800">
+                </div>
+                <div>
+                    <label class="font-bold text-slate-500 uppercase text-[11px] mb-1 block">Phân hệ (Area)</label>
+                    <input type="text" id="editArea" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800">
+                </div>
+                <div>
+                    <label class="font-bold text-slate-500 uppercase text-[11px] mb-1 block">Độ ưu tiên</label>
+                    <select id="editPriority" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800 font-bold">
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="font-bold text-slate-500 uppercase text-[11px] mb-1 block">Các bước thực hiện (Procedure Steps)</label>
+                <textarea id="editSteps" rows="4" class="w-full border border-slate-300 rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800 leading-relaxed"></textarea>
+            </div>
+            <div>
+                <label class="font-bold text-slate-500 uppercase text-[11px] mb-1 block">Kết quả mong đợi (Expected Results)</label>
+                <textarea id="editExpected" rows="4" class="w-full border border-slate-300 rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-amber-500 text-slate-800 leading-relaxed"></textarea>
+            </div>
+        </div>
+        <div class="p-4 bg-slate-50 flex justify-end gap-2 border-t border-slate-100">
+            <button onclick="closeEditModal()" class="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[13px] font-bold rounded-lg transition-colors">Hủy</button>
+            <button onclick="saveEditModalData()" class="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white text-[13px] font-bold rounded-lg transition-colors shadow-sm">Cập nhật thay đổi</button>
+        </div>
     </div>
 </div>
 
@@ -223,117 +381,373 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
 
     function openAIModal() {
         const dataRows = document.querySelectorAll('.tc-data-row');
-        if (dataRows.length === 0) { alert('Không có Test Case nào để AI phân tích!'); return; }
+        if (dataRows.length === 0) {
+            alert('Không có Test Case nào để AI phân tích!');
+            return;
+        }
 
         const tcData = [];
         dataRows.forEach(row => {
             if (row.style.display !== 'none') {
-                tcData.push({ title: row.querySelector('.tc-title').value, steps: row.querySelector('.tc-steps').value, expected: row.querySelector('.tc-expected').value });
+                tcData.push({
+                    title: row.querySelector('.tc-title').value,
+                    steps: row.querySelector('.tc-steps').value,
+                    expected: row.querySelector('.tc-expected').value
+                });
             }
         });
 
-        const modal = document.getElementById('aiModal'); const modalContent = document.getElementById('aiModalContent');
-        modal.classList.remove('hidden'); modal.classList.add('flex');
-        setTimeout(() => { modal.classList.remove('opacity-0'); modalContent.classList.remove('scale-95'); modalContent.classList.add('scale-100'); }, 10);
-        
-        document.getElementById('aiLoading').classList.remove('hidden'); document.getElementById('aiLoadingHeader').classList.remove('hidden'); document.getElementById('aiLoadingFooter').classList.remove('hidden'); document.getElementById('aiResult').classList.add('hidden'); document.getElementById('aiResult').classList.remove('flex');
+        const modal = document.getElementById('aiModal');
+        const modalContent = document.getElementById('aiModalContent');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        setTimeout(() => {
+            modal.classList.remove('opacity-0');
+            modalContent.classList.remove('scale-95');
+            modalContent.classList.add('scale-100');
+        }, 10);
 
-        const formData = new FormData(); formData.append('ajax_action', 'ai_grade'); formData.append('tc_data', JSON.stringify(tcData)); 
+        document.getElementById('aiLoading').classList.remove('hidden');
+        document.getElementById('aiLoadingHeader').classList.remove('hidden');
+        document.getElementById('aiLoadingFooter').classList.remove('hidden');
+        document.getElementById('aiResult').classList.add('hidden');
+        document.getElementById('aiResult').classList.remove('flex');
 
-        fetch('index.php?page=testcase', { method: 'POST', body: formData })
-        .then(response => response.json())
-        .then(data => {
-            if(data.status === 'success') {
-                document.getElementById('aiScore').textContent = data.score;
-                const iconWrapper = document.getElementById('aiScoreIconWrapper'); const icon = document.getElementById('aiScoreIcon'); const badge = document.getElementById('aiStatusBadge');
-                
-                iconWrapper.className = `w-12 h-12 rounded-full flex items-center justify-center text-xl mb-3 shadow-sm bg-${data.color}-100 text-${data.color}-500`;
-                icon.className = `fa-solid ${data.icon}`;
-                badge.className = `px-3 py-1 rounded-full text-[12px] font-bold border border-${data.color}-200 bg-${data.color}-50 text-${data.color}-600`;
-                badge.textContent = data.rating;
+        const formData = new FormData();
+        formData.append('ajax_action', 'ai_grade');
+        formData.append('tc_data', JSON.stringify(tcData));
 
-                document.getElementById('aiGoodPoints').innerHTML = data.good_points.map(p => `<li class="flex gap-2 items-start"><i class="fa-regular fa-circle-check text-emerald-500 mt-0.5"></i> <span>${p}</span></li>`).join('');
-                
-                const missingContainer = document.getElementById('aiMissingPoints').parentElement.parentElement;
-                if (data.missing_points.length > 0) {
-                    missingContainer.style.display = 'block';
-                    document.getElementById('aiMissingPoints').innerHTML = data.missing_points.map(p => `<li class="flex gap-2 items-start text-amber-900"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0"></span> <span>${p}</span></li>`).join('');
-                } else { missingContainer.style.display = 'none'; }
+        fetch('index.php?page=testcase', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    document.getElementById('aiScore').textContent = data.score;
+                    const iconWrapper = document.getElementById('aiScoreIconWrapper');
+                    const icon = document.getElementById('aiScoreIcon');
+                    const badge = document.getElementById('aiStatusBadge');
 
-                document.getElementById('aiSuggestions').innerHTML = data.suggestions.join('<br>');
-                
-                document.getElementById('aiLoading').classList.add('hidden'); document.getElementById('aiLoadingHeader').classList.add('hidden'); document.getElementById('aiLoadingFooter').classList.add('hidden'); document.getElementById('aiResult').classList.remove('hidden'); document.getElementById('aiResult').classList.add('flex');
-            }
-        });
+                    iconWrapper.className = `w-12 h-12 rounded-full flex items-center justify-center text-xl mb-3 shadow-sm bg-${data.color}-100 text-${data.color}-500`;
+                    icon.className = `fa-solid ${data.icon}`;
+                    badge.className = `px-3 py-1 rounded-full text-[12px] font-bold border border-${data.color}-200 bg-${data.color}-50 text-${data.color}-600`;
+                    badge.textContent = data.rating;
+
+                    document.getElementById('aiGoodPoints').innerHTML = data.good_points.map(p => `<li class="flex gap-2 items-start"><i class="fa-regular fa-circle-check text-emerald-500 mt-0.5"></i> <span>${p}</span></li>`).join('');
+
+                    const missingContainer = document.getElementById('aiMissingPoints').parentElement.parentElement;
+                    if (data.missing_points.length > 0) {
+                        missingContainer.style.display = 'block';
+                        document.getElementById('aiMissingPoints').innerHTML = data.missing_points.map(p => `<li class="flex gap-2 items-start text-amber-900"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0"></span> <span>${p}</span></li>`).join('');
+                    } else {
+                        missingContainer.style.display = 'none';
+                    }
+
+                    document.getElementById('aiSuggestions').innerHTML = data.suggestions.join('<br>');
+
+                    document.getElementById('aiLoading').classList.add('hidden');
+                    document.getElementById('aiLoadingHeader').classList.add('hidden');
+                    document.getElementById('aiLoadingFooter').classList.add('hidden');
+                    document.getElementById('aiResult').classList.remove('hidden');
+                    document.getElementById('aiResult').classList.add('flex');
+                }
+            });
     }
 
     function closeAIModal() {
-        const modal = document.getElementById('aiModal'); const modalContent = document.getElementById('aiModalContent');
-        modal.classList.add('opacity-0'); modalContent.classList.remove('scale-100'); modalContent.classList.add('scale-95');
-        setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
+        const modal = document.getElementById('aiModal');
+        const modalContent = document.getElementById('aiModalContent');
+        modal.classList.add('opacity-0');
+        modalContent.classList.remove('scale-100');
+        modalContent.classList.add('scale-95');
+        setTimeout(() => {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }, 300);
     }
 
     function showToast(message, isError = false) {
-        const toast = document.getElementById('toast-msg'); document.getElementById('toast-text').innerHTML = message;
+        const toast = document.getElementById('toast-msg');
+        document.getElementById('toast-text').innerHTML = message;
         toast.className = `fixed top-6 right-6 text-white px-5 py-3 rounded-lg text-[13px] font-medium shadow-2xl transition-opacity z-[100] flex items-center gap-2 ${isError ? 'bg-red-600' : 'bg-slate-800'}`;
         toast.innerHTML = (isError ? '<i class="fa-solid fa-circle-exclamation text-white"></i> ' : '<i class="fa-solid fa-circle-check text-emerald-400"></i> ') + `<span>${message}</span>`;
-        toast.classList.remove('opacity-0'); setTimeout(() => toast.classList.add('opacity-0'), 3000);
+        toast.classList.remove('opacity-0');
+        setTimeout(() => toast.classList.add('opacity-0'), 3000);
     }
 
     function saveAllRows() {
-        const rows = document.querySelectorAll('.tc-data-row'); const dataToSave = [];
+        const rows = document.querySelectorAll('.tc-data-row');
+        const dataToSave = [];
+        
         rows.forEach(row => {
             if (row.style.display !== 'none') {
-                dataToSave.push({ tc_code: row.querySelector('.tc-code').value.trim(), title: row.querySelector('.tc-title').value.trim(), estimation: row.querySelector('.tc-est').value.trim(), area: row.querySelector('.tc-area').value.trim(), procedure_steps: row.querySelector('.tc-steps').value.trim(), expected_results: row.querySelector('.tc-expected').value.trim(), priority: row.querySelector('.tc-priority').value, result_status: row.querySelector('.tc-result').value });
+                dataToSave.push({
+                    tc_code: row.querySelector('.tc-code') ? row.querySelector('.tc-code').value.trim() : '',
+                    title: row.querySelector('.tc-title') ? row.querySelector('.tc-title').value.trim() : '',
+                    estimation: row.querySelector('.tc-est') ? row.querySelector('.tc-est').value.trim() : '',
+                    test_type: row.querySelector('.tc-testtype') ? row.querySelector('.tc-testtype').value.trim() : 'Functional',
+                    area: row.querySelector('.tc-area') ? row.querySelector('.tc-area').value.trim() : '',
+                    procedure_steps: row.querySelector('.tc-steps') ? row.querySelector('.tc-steps').value.trim() : '',
+                    expected_results: row.querySelector('.tc-expected') ? row.querySelector('.tc-expected').value.trim() : '',
+                    priority: row.querySelector('.tc-priority') ? row.querySelector('.tc-priority').value : 'Medium',
+                    result_status: row.querySelector('.tc-result') ? row.querySelector('.tc-result').value : 'Untested'
+                });
             }
         });
-        if (dataToSave.length === 0) { showToast('Không có dữ liệu để lưu!', true); return; }
-        const formData = new FormData(); formData.append('ajax_action', 'save_all'); formData.append('data', JSON.stringify(dataToSave));
-        fetch('index.php?page=testcase', { method: 'POST', body: formData }).then(r => r.json()).then(data => {
-            if(data.status === 'success') {
+
+        if (dataToSave.length === 0) {
+            showToast('Không có dữ liệu để lưu!', true);
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('ajax_action', 'save_all');
+        formData.append('data', JSON.stringify(dataToSave));
+
+        fetch('index.php?page=testcase', {
+            method: 'POST',
+            body: formData
+        }).then(r => r.json()).then(data => {
+            if (data.status === 'success') {
                 showToast(data.message);
-                rows.forEach(row => { if (row.style.display !== 'none') { row.classList.remove('bg-indigo-50/40'); row.classList.add('bg-emerald-50'); setTimeout(() => row.classList.remove('bg-emerald-50'), 1000); } });
-            } else { showToast(data.message, true); }
+                // Tô sáng toàn bộ các dòng vừa lưu sang màu xanh nhẹ
+                rows.forEach(row => {
+                    if (row.style.display !== 'none') {
+                        row.classList.remove('bg-amber-50');
+                        row.classList.add('bg-emerald-50');
+                        setTimeout(() => row.classList.remove('bg-emerald-50'), 1500);
+                    }
+                });
+            } else {
+                showToast(data.message, true);
+            }
+        }).catch(error => {
+            showToast('Lỗi kết nối khi lưu tất cả!', true);
         });
     }
 
-    function triggerExcelImport() { document.getElementById('excelFileInput').click(); }
+    function triggerExcelImport() {
+        document.getElementById('excelFileInput').click();
+    }
 
     function handleExcelUpload(event) {
-        const file = event.target.files[0]; if (!file) return;
+        const file = event.target.files[0];
+        if (!file) return;
         const reader = new FileReader();
         reader.onload = function(e) {
             try {
-                const data = new Uint8Array(e.target.result); const workbook = XLSX.read(data, {type: 'array'});
-                const worksheet = workbook.Sheets[workbook.SheetNames[0]]; const jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {
+                    type: 'array'
+                });
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+                    header: 1
+                });
+
                 document.querySelectorAll('.tc-data-row').forEach(r => r.remove());
+
                 for (let i = 1; i < jsonData.length; i++) {
-                    const row = jsonData[i]; if (!row || row.length === 0 || row.join('').trim() === '') continue;
-                    let steps = row[4] || ''; if (!steps.toLowerCase().includes('access the website') && steps !== '') { steps = "1. Access the website.\n" + (steps ? "2. " + steps : ""); }
-                    pushRowToTable(row[1] || '', row[2] || '', '', row[3] || '', steps, row[5] || '', row[6] || 'Medium');
+                    const row = jsonData[i];
+                    if (!row || row.length === 0 || row.join('').trim() === '') continue;
+
+                    // Ánh xạ thẳng mặt từng cột theo đúng thứ tự file CSV của bạn:
+                    let tcId = row[0] || ''; // Cột 0: Mã TC
+                    let title = row[1] || ''; // Cột 1: Tiêu đề
+                    let est = row[2] || ''; // Cột 2: Thời gian
+                    let testType = row[3] || 'Functional'; // Cột 3: Loại kiểm thử
+                    let area = row[4] || ''; // Cột 4: Phân hệ
+                    let steps = row[5] || ''; // Cột 5: Các bước thực hiện
+
+                    // Tự động chuẩn hóa câu lệnh bắt buộc
+                    if (!steps.toLowerCase().includes('access the website') && steps !== '') {
+                        steps = "1. Access the website.\n" + (steps ? "2. " + steps : "");
+                    }
+
+                    let expected = row[6] || ''; // Cột 6: Kết quả mong đợi
+                    let priority = row[7] || 'Medium'; // Cột 7: Priority (Độ ưu tiên)
+                    let resultStatus = row[8] || 'Untested'; // Cột 8: Trạng thái (Failed/Passed/Untested)
+
+                    // Gọi hàm vẽ dòng và truyền luôn trạng thái kết quả vào đúng cột Result
+                    pushRowToTableComplete(tcId, title, est, testType, area, steps, expected, priority, resultStatus);
                 }
-                showToast('Đã nạp file Excel!');
-            } catch (error) { showToast('Không thể đọc file.', true); } 
-            finally { event.target.value = ''; checkEmptyState(); }
+                showToast('Đã nạp file Excel thành công!');
+            } catch (error) {
+                showToast('Không thể đọc file Excel.', true);
+            } finally {
+                event.target.value = '';
+                checkEmptyState();
+            }
         };
         reader.readAsArrayBuffer(file);
     }
 
+    function viewRowDetail(btn) {
+        const row = btn.closest('tr');
+
+        // Lấy dữ liệu từ các ô input/textarea/select trong dòng hiện tại
+        document.getElementById('detailTcCode').textContent = row.querySelector('.tc-code') ? row.querySelector('.tc-code').value : '';
+        document.getElementById('detailTitle').textContent = row.querySelector('.tc-title') ? row.querySelector('.tc-title').value : '';
+        document.getElementById('detailEst').textContent = row.querySelector('.tc-est') ? row.querySelector('.tc-est').value : '';
+        document.getElementById('detailTestType').textContent = row.querySelector('.tc-testtype') ? row.querySelector('.tc-testtype').value : 'Functional';
+        document.getElementById('detailArea').textContent = row.querySelector('.tc-area') ? row.querySelector('.tc-area').value : '';
+        document.getElementById('detailSteps').textContent = row.querySelector('.tc-steps') ? row.querySelector('.tc-steps').value : '';
+        document.getElementById('detailExpected').textContent = row.querySelector('.tc-expected') ? row.querySelector('.tc-expected').value : '';
+
+        const priorityVal = row.querySelector('.tc-priority') ? row.querySelector('.tc-priority').value : 'Medium';
+        const priorityEl = document.getElementById('detailPriority');
+        priorityEl.textContent = priorityVal;
+        priorityEl.className = `font-bold mt-1 ${priorityVal === 'High' ? 'text-red-600' : (priorityVal === 'Critical' ? 'text-purple-600' : 'text-blue-600')}`;
+
+        // Hiển thị modal với hiệu ứng mượt mà
+        const modal = document.getElementById('viewDetailModal');
+        const content = document.getElementById('viewDetailContent');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        setTimeout(() => {
+            modal.classList.remove('opacity-0');
+            content.classList.remove('scale-95');
+            content.classList.add('scale-100');
+        }, 10);
+    }
+
+    function closeDetailModal() {
+        const modal = document.getElementById('viewDetailModal');
+        const content = document.getElementById('viewDetailContent');
+        modal.classList.add('opacity-0');
+        content.classList.remove('scale-100');
+        content.classList.add('scale-95');
+        setTimeout(() => {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }, 300);
+    }
+
+    let currentEditingRow = null;
+
+    function openEditModal(btn) {
+        currentEditingRow = btn.closest('tr');
+
+        // Lấy dữ liệu sẵn có trên dòng điền vào ô input của modal
+        document.getElementById('editTcCode').value = currentEditingRow.querySelector('.tc-code') ? currentEditingRow.querySelector('.tc-code').value : '';
+        document.getElementById('editTitle').value = currentEditingRow.querySelector('.tc-title') ? currentEditingRow.querySelector('.tc-title').value : '';
+        document.getElementById('editEst').value = currentEditingRow.querySelector('.tc-est') ? currentEditingRow.querySelector('.tc-est').value : '';
+        document.getElementById('editTestType').value = currentEditingRow.querySelector('.tc-testtype') ? currentEditingRow.querySelector('.tc-testtype').value : 'Functional';
+        document.getElementById('editArea').value = currentEditingRow.querySelector('.tc-area') ? currentEditingRow.querySelector('.tc-area').value : '';
+        document.getElementById('editSteps').value = currentEditingRow.querySelector('.tc-steps') ? currentEditingRow.querySelector('.tc-steps').value : '';
+        document.getElementById('editExpected').value = currentEditingRow.querySelector('.tc-expected') ? currentEditingRow.querySelector('.tc-expected').value : '';
+        document.getElementById('editPriority').value = currentEditingRow.querySelector('.tc-priority') ? currentEditingRow.querySelector('.tc-priority').value : 'Medium';
+
+        // Bật Modal lên
+        const modal = document.getElementById('editModal');
+        const content = document.getElementById('editModalContent');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        setTimeout(() => {
+            modal.classList.remove('opacity-0');
+            content.classList.remove('scale-95');
+            content.classList.add('scale-100');
+        }, 10);
+    }
+
+    function closeEditModal() {
+        const modal = document.getElementById('editModal');
+        const content = document.getElementById('editModalContent');
+        modal.classList.add('opacity-0');
+        content.classList.remove('scale-100');
+        content.classList.add('scale-95');
+        setTimeout(() => {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            currentEditingRow = null;
+        }, 300);
+    }
+
+    function saveEditModalData() {
+        if (!currentEditingRow) return;
+
+        // Đẩy ngược dữ liệu từ modal về lại các ô input trên bảng giao diện chính
+        currentEditingRow.querySelector('.tc-title').value = document.getElementById('editTitle').value;
+        currentEditingRow.querySelector('.tc-est').value = document.getElementById('editEst').value;
+        currentEditingRow.querySelector('.tc-testtype').value = document.getElementById('editTestType').value;
+        currentEditingRow.querySelector('.tc-area').value = document.getElementById('editArea').value;
+        currentEditingRow.querySelector('.tc-steps').value = document.getElementById('editSteps').value;
+        currentEditingRow.querySelector('.tc-expected').value = document.getElementById('editExpected').value;
+        currentEditingRow.querySelector('.tc-priority').value = document.getElementById('editPriority').value;
+
+        // Đóng modal và báo thành công
+        closeEditModal();
+        showToast('Đã cập nhật thông tin kịch bản!');
+
+        // Tô sáng dòng vừa sửa để dễ nhận biết
+        currentEditingRow.classList.add('bg-amber-50');
+        setTimeout(() => currentEditingRow.classList.remove('bg-amber-50'), 1500);
+    }
+
     function saveRow(btn) {
-        const row = btn.closest('tr'); const formData = new FormData();
-        formData.append('ajax_action', 'save'); formData.append('tc_code', row.querySelector('.tc-code').value.trim()); formData.append('title', row.querySelector('.tc-title').value.trim()); formData.append('estimation', row.querySelector('.tc-est').value.trim()); formData.append('area', row.querySelector('.tc-area').value.trim()); formData.append('procedure_steps', row.querySelector('.tc-steps').value.trim()); formData.append('expected_results', row.querySelector('.tc-expected').value.trim()); formData.append('priority', row.querySelector('.tc-priority').value); formData.append('result_status', row.querySelector('.tc-result').value);
-        fetch('index.php?page=testcase', { method: 'POST', body: formData }).then(r => r.json()).then(data => {
-            if(data.status === 'success') { showToast(data.message); row.classList.remove('bg-indigo-50/40'); row.classList.add('bg-emerald-50'); setTimeout(() => row.classList.remove('bg-emerald-50'), 1000); } 
-            else { showToast(data.message, true); }
+        const row = btn.closest('tr');
+        const formData = new FormData();
+        formData.append('ajax_action', 'save');
+        formData.append('tc_code', row.querySelector('.tc-code').value.trim());
+        formData.append('title', row.querySelector('.tc-title').value.trim());
+        formData.append('estimation', row.querySelector('.tc-est').value.trim());
+        formData.append('test_type', row.querySelector('.tc-testtype').value.trim()); // Lưu thêm Test Type
+        formData.append('area', row.querySelector('.tc-area').value.trim());
+        formData.append('procedure_steps', row.querySelector('.tc-steps').value.trim());
+        formData.append('expected_results', row.querySelector('.tc-expected').value.trim());
+        formData.append('priority', row.querySelector('.tc-priority').value);
+        formData.append('result_status', row.querySelector('.tc-result').value);
+
+        fetch('index.php?page=testcase', {
+            method: 'POST',
+            body: formData
+        }).then(r => r.json()).then(data => {
+            if (data.status === 'success') {
+                showToast(data.message);
+                row.classList.remove('bg-indigo-50/40');
+                row.classList.add('bg-emerald-50');
+                setTimeout(() => row.classList.remove('bg-emerald-50'), 1000);
+            } else {
+                showToast(data.message, true);
+            }
         });
     }
 
     function deleteRow(btn) {
-        if (confirm('Bạn có chắc chắn muốn xóa kịch bản này?')) {
-            const row = btn.closest('tr'); const formData = new FormData(); formData.append('ajax_action', 'delete'); formData.append('tc_code', row.querySelector('.tc-code').value.trim());
-            fetch('index.php?page=testcase', { method: 'POST', body: formData }).then(r => r.json()).then(data => {
-                if(data.status === 'success') { showToast(data.message); row.remove(); checkEmptyState(); } 
-                else { showToast(data.message, true); }
+        const row = btn.closest('tr');
+        const tcCodeInput = row.querySelector('.tc-code');
+
+        // Kiểm tra xem dòng này đã được lưu vào CSDL chưa (dựa vào class hoặc việc gọi server)
+        // Nếu là dòng mới thêm nháp (chưa bấm lưu), ta xóa trực tiếp trên giao diện luôn cho mượt
+        if (!tcCodeInput || row.classList.contains('bg-white') && !row.dataset.saved) {
+            if (confirm('Bạn có chắc chắn muốn xóa kịch bản này?')) {
+                row.remove();
+                checkEmptyState();
+                showToast('Đã xóa kịch bản tạm!');
+            }
+            return;
+        }
+
+        // Nếu là dòng đã tồn tại trong CSDL, thực hiện gọi Ajax để xóa vĩnh viễn
+        if (confirm('Bạn có chắc chắn muốn xóa kịch bản này khỏi hệ thống?')) {
+            const formData = new FormData();
+            formData.append('ajax_action', 'delete');
+            formData.append('tc_code', tcCodeInput.value.trim());
+
+            fetch('index.php?page=testcase', {
+                method: 'POST',
+                body: formData
+            }).then(r => r.json()).then(data => {
+                if (data.status === 'success') {
+                    showToast(data.message);
+                    row.remove();
+                    checkEmptyState();
+                } else {
+                    showToast(data.message, true);
+                }
+            }).catch(error => {
+                showToast('Lỗi kết nối khi xóa!', true);
             });
         }
     }
@@ -341,33 +755,105 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_action'])) {
     function getNextTcId() {
         let maxId = 0;
         document.querySelectorAll('.tc-code').forEach(input => {
-            const match = input.value.trim().match(/\d+/); 
-            if (match) { const num = parseInt(match[0], 10); if (num > maxId) maxId = num; }
+            const match = input.value.trim().match(/\d+/);
+            if (match) {
+                const num = parseInt(match[0], 10);
+                if (num > maxId) maxId = num;
+            }
         });
         return maxId + 1;
     }
 
-    function pushRowToTable(tcId, title, est, area, steps, expected, priority) {
-        const tbody = document.getElementById('testcase-tbody'); const newRow = document.createElement('tr');
-        if (!tcId) { tcId = "TC" + String(getNextTcId()).padStart(4, '0'); }
+    function pushRowToTableComplete(tcId, title, est, testType, area, steps, expected, priority, resultStatus) {
+        const tbody = document.getElementById('testcase-tbody');
+        const newRow = document.createElement('tr');
+        if (!tcId) {
+            tcId = "TC" + String(getNextTcId()).padStart(4, '0');
+        }
         newRow.className = 'tc-data-row hover:bg-slate-50/80 transition-colors group bg-white';
         newRow.innerHTML = `
-            <td class="px-5 py-4 align-top pt-6"><input type="text" class="w-[90px] text-[13px] font-bold text-slate-700 text-center bg-transparent focus:outline-none border-b border-dashed border-slate-300 focus:border-blue-500 tc-code transition-colors" value="${tcId}"></td>
-            <td class="px-5 py-4 align-top"><textarea rows="4" class="w-full text-[13px] text-slate-800 resize-none bg-slate-50/50 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-500 rounded-md p-2 transition-colors leading-relaxed tc-title">${title}</textarea></td>
-            <td class="px-5 py-4 align-top pt-5"><input type="text" class="w-full text-[13px] text-slate-800 text-center bg-slate-50/50 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-500 rounded-md p-2 transition-colors tc-est" value="${est}"></td>
-            <td class="px-5 py-4 align-top pt-5"><input type="text" class="w-full text-[13px] text-slate-800 text-center bg-slate-50/50 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-500 rounded-md p-2 transition-colors tc-area" value="${area}"></td>
-            <td class="px-5 py-4 align-top"><textarea rows="4" class="w-full text-[13px] text-slate-800 resize-none bg-slate-50/50 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-500 rounded-md p-2 transition-colors leading-relaxed tc-steps">${steps}</textarea></td>
-            <td class="px-5 py-4 align-top"><textarea rows="4" class="w-full text-[13px] text-slate-800 resize-none bg-emerald-50/20 hover:bg-emerald-50/70 focus:bg-white border border-transparent focus:border-emerald-500 rounded-md p-2 transition-colors leading-relaxed tc-expected">${expected}</textarea></td>
-            <td class="px-5 py-4 align-top pt-5 text-center"><select class="w-full text-[13px] text-slate-800 font-bold bg-slate-50/50 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-500 rounded-md p-2 transition-colors appearance-none cursor-pointer tc-priority text-center"><option value="High" ${priority.trim().toLowerCase() === 'high' ? 'selected' : ''}>High</option><option value="Medium" ${priority.trim().toLowerCase() === 'medium' || (priority.trim().toLowerCase() !== 'high' && priority.trim().toLowerCase() !== 'low') ? 'selected' : ''}>Medium</option><option value="Low" ${priority.trim().toLowerCase() === 'low' ? 'selected' : ''}>Low</option></select></td>
-            <td class="px-5 py-4 align-top pt-5 text-center"><select class="w-full text-[13px] text-slate-800 font-bold bg-slate-50/50 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-500 rounded-md p-2 transition-colors appearance-none cursor-pointer tc-result text-center"><option value="Untested" selected>Untested</option><option value="Passed" class="text-emerald-600">Passed</option><option value="Failed" class="text-red-600">Failed</option></select></td>
-            <td class="px-5 py-4 align-top pt-5 text-center"><div class="flex items-center justify-center gap-2 opacity-30 group-hover:opacity-100 transition-opacity"><a href="#" onclick="alert('Tính năng Xem chi tiết sẽ mở khi đã lưu.'); return false;" class="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-600 hover:text-white transition inline-flex items-center justify-center shadow-sm"><i class="fa-regular fa-eye"></i></a><button onclick="saveRow(this)" class="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition shadow-sm"><i class="fa-regular fa-floppy-disk"></i></button><button onclick="deleteRow(this)" class="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition shadow-sm"><i class="fa-solid fa-xmark"></i></button></div></td>
-        `;
+        <td class="px-5 py-4 align-top pt-6"><input type="text" class="w-[90px] text-[13px] font-bold text-slate-700 text-center bg-transparent focus:outline-none border-b border-dashed border-slate-300 focus:border-blue-500 tc-code transition-colors" value="${tcId}"></td>
+        <td class="px-5 py-4 align-top"><textarea rows="4" class="w-full text-[13px] text-slate-800 resize-none bg-slate-50/50 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-500 rounded-md p-2 transition-colors leading-relaxed tc-title">${title}</textarea></td>
+        <td class="px-5 py-4 align-top pt-5"><input type="text" class="w-full text-[13px] text-slate-800 text-center bg-slate-50/50 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-500 rounded-md p-2 transition-colors tc-est" value="${est}"></td>
+        <td class="px-5 py-4 align-top pt-5"><input type="text" class="w-full text-[13px] text-slate-800 text-center bg-slate-50/50 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-500 rounded-md p-2 transition-colors tc-testtype" value="${testType}"></td>
+        <td class="px-5 py-4 align-top pt-5"><input type="text" class="w-full text-[13px] text-slate-800 text-center bg-slate-50/50 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-500 rounded-md p-2 transition-colors tc-area" value="${area}"></td>
+        <td class="px-5 py-4 align-top"><textarea rows="4" class="w-full text-[13px] text-slate-800 resize-none bg-slate-50/50 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-500 rounded-md p-2 transition-colors leading-relaxed tc-steps">${steps}</textarea></td>
+        <td class="px-5 py-4 align-top"><textarea rows="4" class="w-full text-[13px] text-slate-800 resize-none bg-emerald-50/20 hover:bg-emerald-50/70 focus:bg-white border border-transparent focus:border-emerald-500 rounded-md p-2 transition-colors leading-relaxed tc-expected">${expected}</textarea></td>
+        <td class="px-5 py-4 align-top pt-5 text-center"><select class="w-full text-[13px] text-slate-800 font-bold bg-slate-50/50 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-500 rounded-md p-2 transition-colors appearance-none cursor-pointer tc-priority text-center"><option value="High" ${priority.trim().toLowerCase() === 'high' ? 'selected' : ''}>High</option><option value="Medium" ${priority.trim().toLowerCase() === 'medium' || (priority.trim().toLowerCase() !== 'high' && priority.trim().toLowerCase() !== 'low') ? 'selected' : ''}>Medium</option><option value="Low" ${priority.trim().toLowerCase() === 'low' ? 'selected' : ''}>Low</option></select></td>
+        <td class="px-5 py-4 align-top pt-5 text-center"><select class="w-full text-[13px] text-slate-800 font-bold bg-slate-50/50 hover:bg-slate-100 focus:bg-white border border-transparent focus:border-blue-500 rounded-md p-2 transition-colors appearance-none cursor-pointer tc-result text-center"><option value="Untested" ${resultStatus.trim().toLowerCase() === 'untested' ? 'selected' : ''}>Untested</option><option value="Passed" ${resultStatus.trim().toLowerCase() === 'passed' ? 'selected' : ''} class="text-emerald-600">Passed</option><option value="Failed" ${resultStatus.trim().toLowerCase() === 'failed' ? 'selected' : ''} class="text-red-600">Failed</option></select></td>
+        <td class="px-5 py-4 align-top pt-5 text-center">
+            <div class="flex items-center justify-center gap-1.5 opacity-30 group-hover:opacity-100 transition-opacity">
+                <!-- Nút Sửa mở Modal riêng -->
+                <a href="#" onclick="openEditModal(this); return false;" class="p-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-600 hover:text-white transition inline-flex items-center justify-center shadow-sm" title="Sửa kịch bản"><i class="fa-regular fa-pen-to-square"></i></a>
+                <!-- Nút Xem chi tiết -->
+                <a href="#" onclick="viewRowDetail(this); return false;" class="p-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-600 hover:text-white transition inline-flex items-center justify-center shadow-sm" title="Xem chi tiết"><i class="fa-regular fa-eye"></i></a>
+                <!-- Nút Lưu -->
+                <button onclick="saveRow(this)" class="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition shadow-sm" title="Lưu dòng"><i class="fa-regular fa-floppy-disk"></i></button>
+                <!-- Nút Xóa -->
+                <button onclick="deleteRow(this)" class="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition shadow-sm" title="Xóa dòng"><i class="fa-solid fa-xmark"></i></button>
+                <button onclick="saveAllRows()" class="flex items-center gap-1.5 px-4 py-2.5 border border-blue-200 bg-blue-50 hover:bg-blue-100 rounded-lg text-[13px] text-blue-700 transition shrink-0 font-semibold shadow-sm">
+                    <i class="fa-solid fa-layer-group"></i> Lưu tất cả
+                </button>
+            </div>
+        </td>
+    `;
         document.getElementById('testcase-tbody').appendChild(newRow);
-        checkEmptyState(); 
-        newRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        checkEmptyState();
     }
 
-    function addTestCaseRow() { pushRowToTable('', '', '', '', '1. Access the website.\n2. ', '', 'Medium'); }
-    function filterTestCase() { const filter = document.getElementById('searchTC').value.toLowerCase(); document.querySelectorAll('.tc-data-row').forEach(row => { row.style.display = (row.querySelector('.tc-code').value.toLowerCase().indexOf(filter) > -1 || row.querySelector('.tc-title').value.toLowerCase().indexOf(filter) > -1) ? "" : "none"; }); }
-    document.addEventListener("DOMContentLoaded", function() { checkEmptyState(); });
+    function addTestCaseRow() {
+        pushRowToTable('', '', '', 'Functional', '', '1. Access the website.\n2. ', '', 'Medium');
+    }
+
+    function filterTestCase() {
+        const filter = document.getElementById('searchTC').value.toLowerCase();
+        document.querySelectorAll('.tc-data-row').forEach(row => {
+            row.style.display = (row.querySelector('.tc-code').value.toLowerCase().indexOf(filter) > -1 || row.querySelector('.tc-title').value.toLowerCase().indexOf(filter) > -1) ? "" : "none";
+        });
+    }
+    document.addEventListener("DOMContentLoaded", function() {
+        checkEmptyState();
+    });
+
+    function exportVisibleTestCases() {
+        const rows = document.querySelectorAll('.tc-data-row');
+        const dataToExport = [];
+
+        rows.forEach(row => {
+            // Chỉ lấy những dòng đang hiển thị trên màn hình (bỏ qua các dòng bị ẩn khi dùng ô tìm kiếm)
+            if (row.style.display !== 'none') {
+                dataToExport.push({
+                    tc_code: row.querySelector('.tc-code') ? row.querySelector('.tc-code').value.trim() : '',
+                    title: row.querySelector('.tc-title') ? row.querySelector('.tc-title').value.trim() : '',
+                    estimation: row.querySelector('.tc-est') ? row.querySelector('.tc-est').value.trim() : '',
+                    test_type: row.querySelector('.tc-testtype') ? row.querySelector('.tc-testtype').value.trim() : 'Functional',
+                    area: row.querySelector('.tc-area') ? row.querySelector('.tc-area').value.trim() : '',
+                    procedure_steps: row.querySelector('.tc-steps') ? row.querySelector('.tc-steps').value.trim() : '',
+                    expected_results: row.querySelector('.tc-expected') ? row.querySelector('.tc-expected').value.trim() : '',
+                    priority: row.querySelector('.tc-priority') ? row.querySelector('.tc-priority').value : 'Medium',
+                    result_status: row.querySelector('.tc-result') ? row.querySelector('.tc-result').value : 'Untested'
+                });
+            }
+        });
+
+        if (dataToExport.length === 0) {
+            showToast('Không có dữ liệu nào đang hiển thị để xuất!', true);
+            return;
+        }
+
+        // Tạo form ẩn để POST dữ liệu JSON sang file export_selected.php
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = 'export_selected.php';
+
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'testcases_data';
+        input.value = JSON.stringify(dataToExport);
+
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+    }
 </script>
