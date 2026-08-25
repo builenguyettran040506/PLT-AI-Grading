@@ -1,0 +1,21 @@
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+# Environment
+.env
+
+# Dependencies
+vendor/
+node_modules/
+
+# Uploads
+uploads/
+
+# Windows
+Thumbs.db
+
+# macOS
+.DS_Store
